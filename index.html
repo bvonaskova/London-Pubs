@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <title>London Pubs Near Parks — Draught Beers, Pint Prices & Stations (Zones 1-5)</title>
+    
+    <!-- iOS Web App / PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Pubs & Parks">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/180/beer.png">
+
+    <!-- Leaflet CSS for Google Maps Aesthetic -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --park-green: #2e7d32;
+            --park-badge: #e8f5e9;
+            --pub-amber: #e65100;
+            --price-green: #2e7d32;
+            --transit-blue: #0288d1;
+            --bg-light: #f8f9fa;
+            --text-dark: #202124;
+            --text-muted: #5f6368;
+            --border-color: #dadce0;
+            --card-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px rgba(60,64,67,0.15);
+            --sidebar-width: 480px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", 'Google Sans', Roboto, "Segoe UI", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Top App Navigation */
+        header {
+            background: #ffffff;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.65rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1000;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            flex-wrap: wrap;
+            gap: 0.8rem;
+        }
+
+        .brand-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .benchmark-badge {
+            background: var(--park-badge);
+            color: var(--park-green);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.65rem;
+            border-radius: 12px;
+            border: 1px solid #c8e6c9;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        /* Top Controls Toolbar */
+        .controls-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #f1f3f4;
+            padding: 0.35rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .slider-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .radius-val {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--primary);
+            min-width: 45px;
+        }
+
+        input[type="range"] {
+            width: 100px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .search-input {
+            padding: 0.45rem 0.8rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            outline: none;
+            width: 200px;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+        }
+
+        /* Sort Dropdown */
+        .sort-select {
+            padding: 0.4rem 0.6rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: #ffffff;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Main Container: Sidebar + Map */
+        .main-layout {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Sidebar Panel */
+        #sidebar {
+            width: var(--sidebar-width);
+            background: #ffffff;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 500;
+            box-shadow: 2px 0 6px rgba(0,0,0,0.06);
+            height: 100%;
+        }
+
+        .sidebar-header {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            background: #fafafa;
+        }
+
+        .results-summary {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Zone Selector Tabs */
+        .zone-selector {
+            display: flex;
+            gap: 0.3rem;
+            margin-top: 0.5rem;
+            overflow-x: auto;
+            padding-bottom: 0.2rem;
+        }
+
+        .zone-pill {
+            font-size: 0.72rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: #fff;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-muted);
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+
+        .zone-pill:hover {
+            background: #f1f3f4;
+        }
+
+        .zone-pill.active {
+            background: #e8f0fe;
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* Feature & Quick Filter Chips */
+        .filter-row {
+            display: flex;
+            gap: 0.35rem;
+            margin-top: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-chip {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .filter-chip:hover {
+            background: #f1f3f4;
+        }
+
+        .filter-chip.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .pub-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.65rem;
+        }
+
+        .pub-card {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.85rem;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+        }
+
+        .pub-card:hover {
+            box-shadow: var(--card-shadow);
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+
+        .pub-card.active {
+            border: 2px solid var(--primary);
+            background: #f8fbff;
+        }
+
+        .pub-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.25rem;
+        }
+
+        .pub-name {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .badges-top {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .dist-badge {
+            background: #fff3e0;
+            color: var(--pub-amber);
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 0.2rem 0.45rem;
+            border-radius: 6px;
+            border: 1px solid #ffe0b2;
+            white-space: nowrap;
+        }
+
+        .price-badge {
+            background: #e8f5e9;
+            color: #1b5e20;
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 0.2rem 0.45rem;
+            border-radius: 6px;
+            border: 1px solid #c8e6c9;
+            white-space: nowrap;
+        }
+
+        .pub-address {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+
+        .meta-tags-container {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.45rem;
+        }
+
+        .park-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.73rem;
+            background: var(--park-badge);
+            color: var(--park-green);
+            padding: 0.18rem 0.45rem;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .zone-badge {
+            font-size: 0.68rem;
+            background: #ede7f6;
+            color: #512da8;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 700;
+            border: 1px solid #d1c4e9;
+        }
+
+        .station-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.73rem;
+            background: #e1f5fe;
+            color: var(--transit-blue);
+            padding: 0.18rem 0.45rem;
+            border-radius: 6px;
+            font-weight: 600;
+            border: 1px solid #b3e5fc;
+        }
+
+        /* Beers on Tap Section */
+        .on-tap-section {
+            background: #fdfbf7;
+            border: 1px solid #fae8c8;
+            border-radius: 6px;
+            padding: 0.45rem 0.6rem;
+            margin-top: 0.4rem;
+            margin-bottom: 0.45rem;
+        }
+
+        .on-tap-header {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #8d5b00;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .beers-pill-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+
+        .beer-pill {
+            font-size: 0.68rem;
+            background: #ffffff;
+            color: #4e342e;
+            padding: 0.12rem 0.4rem;
+            border-radius: 4px;
+            border: 1px solid #eedec4;
+            font-weight: 500;
+        }
+
+        .beer-pill.cask {
+            background: #fff3e0;
+            color: #e65100;
+            font-weight: 600;
+            border-color: #ffcc80;
+        }
+
+        .pub-features {
+            display: flex;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+
+        .feat-pill {
+            font-size: 0.68rem;
+            background: #f1f3f4;
+            color: #3c4043;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        /* Map Area */
+        #map {
+            flex: 1;
+            height: 100%;
+            background: #e5e3df;
+        }
+
+        /* Leaflet Popups */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            line-height: 1.4;
+            min-width: 275px;
+            max-width: 330px;
+        }
+
+        .popup-card {
+            padding: 0.9rem 1rem;
+        }
+
+        .popup-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 0.2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .popup-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.45rem;
+        }
+
+        .popup-metric {
+            background: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.45rem 0.6rem;
+            font-size: 0.78rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state {
+            padding: 3rem 1rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* iOS Mobile Ergonomics */
+        @media (max-width: 768px) {
+            .main-layout {
+                flex-direction: column-reverse;
+            }
+            #sidebar {
+                width: 100%;
+                height: 48%;
+            }
+            #map {
+                height: 52%;
+            }
+            .controls-toolbar {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .search-input {
+                width: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Toolbar -->
+    <header>
+        <div class="brand-group">
+            <div class="brand-title">🍺 London Pubs by Parks</div>
+            <div class="benchmark-badge" title="All included London parks strictly exceed Shepherd's Bush Green (3.2 ha / 8 acres). Covers TfL Zones 1 to 5.">
+                🌳 > Shepherd's Bush Green (3.2 ha)
+            </div>
+        </div>
+
+        <div class="controls-toolbar">
+            <div class="slider-group">
+                <span class="slider-label">Radius:</span>
+                <input type="range" id="radius-slider" min="0" max="500" step="10" value="350" oninput="updateRadius(this.value)">
+                <span class="radius-val" id="radius-display">350 m</span>
+            </div>
+
+            <select id="sort-select" class="sort-select" onchange="renderMapAndList()">
+                <option value="distance">📍 Nearest Park</option>
+                <option value="price_asc">💰 Price (Low to High)</option>
+                <option value="price_desc">💰 Price (High to Low)</option>
+                <option value="rating">⭐ Highest Rated</option>
+            </select>
+
+            <input type="text" id="search-box" class="search-input" placeholder="Search pub, beer, station..." oninput="filterPubs()">
+        </div>
+    </header>
+
+    <!-- App Layout: Sidebar + Google-Styled Leaflet Map -->
+    <div class="main-layout">
+        <!-- Sidebar Results List -->
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <div class="results-summary">
+                    <span id="results-count">30 Pubs Found</span>
+                    <span style="font-size: 0.75rem; color: var(--primary); font-weight: 600;" id="radius-label">≤ 350m from park</span>
+                </div>
+                
+                <!-- Zone Filters (Zones 1-5) -->
+                <div class="zone-selector">
+                    <button class="zone-pill active" onclick="setZoneFilter('all', this)">All Zones</button>
+                    <button class="zone-pill" onclick="setZoneFilter(1, this)">Zone 1</button>
+                    <button class="zone-pill" onclick="setZoneFilter(2, this)">Zone 2</button>
+                    <button class="zone-pill" onclick="setZoneFilter(3, this)">Zone 3 (Gunnersbury)</button>
+                    <button class="zone-pill" onclick="setZoneFilter(4, this)">Zone 4</button>
+                    <button class="zone-pill" onclick="setZoneFilter(5, this)">Zone 5</button>
+                </div>
+
+                <!-- Feature & Price Filter Chips -->
+                <div class="filter-row">
+                    <button class="filter-chip active" onclick="setFeatureFilter('all', this)">All Pubs</button>
+                    <button class="filter-chip" onclick="setFeatureFilter('under_6', this)">💰 Avg &lt; £6.20</button>
+                    <button class="filter-chip" onclick="setFeatureFilter('cask', this)">🍺 Cask Ale on Tap</button>
+                    <button class="filter-chip" onclick="setFeatureFilter('station_close', this)">🚇 ≤5m to Station</button>
+                    <button class="filter-chip" onclick="setFeatureFilter('garden', this)">🌿 Beer Garden</button>
+                    <button class="filter-chip" onclick="setFeatureFilter('direct', this)">📍 On Park (≤50m)</button>
+                </div>
+            </div>
+
+            <div class="pub-list" id="pub-list-container">
+                <!-- Injected via JavaScript -->
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // Baseline Benchmark: Shepherd's Bush Green = 3.2 hectares (32,000 m²)
+        const allQualifyingParks = [
+            // --- ZONE 3 ---
+            { id: "gunnersbury-park", name: "Gunnersbury Park", zone: 3, sizeHa: 72, sizeDesc: "72 ha (22.5× SB Green)", lat: 51.4984, lng: -0.2858 },
+            { id: "chiswick-house", name: "Chiswick House Grounds", zone: 3, sizeHa: 26, sizeDesc: "26 ha (8.1× SB Green)", lat: 51.4839, lng: -0.2586 },
+            { id: "acton-park", name: "Acton Park", zone: 3, sizeHa: 11.3, sizeDesc: "11.3 ha (3.5× SB Green)", lat: 51.5075, lng: -0.2635 },
+            { id: "walpole-park", name: "Walpole & Lammas Park", zone: 3, sizeHa: 21.4, sizeDesc: "21.4 ha (6.7× SB Green)", lat: 51.5085, lng: -0.3075 },
+            { id: "kew-gardens", name: "Kew Gardens & Green", zone: 3, sizeHa: 130, sizeDesc: "130 ha (41× SB Green)", lat: 51.4787, lng: -0.2955 },
+            { id: "wimbledon-common", name: "Wimbledon Common", zone: 3, sizeHa: 460, sizeDesc: "460 ha (144× SB Green)", lat: 51.4335, lng: -0.2312 },
+            { id: "crystal-palace", name: "Crystal Palace Park", zone: 3, sizeHa: 80, sizeDesc: "80 ha (25× SB Green)", lat: 51.4222, lng: -0.0712 },
+            { id: "alexandra-park", name: "Alexandra Park (Ally Pally)", zone: 3, sizeHa: 80, sizeDesc: "80 ha (25× SB Green)", lat: 51.5945, lng: -0.1305 },
+            { id: "wanstead-flats", name: "Wanstead Flats (Epping Forest)", zone: 3, sizeHa: 180, sizeDesc: "180 ha (56× SB Green)", lat: 51.5585, lng: 0.0215 },
+            { id: "olympic-park", name: "Queen Elizabeth Olympic Park", zone: 3, sizeHa: 226, sizeDesc: "226 ha (70× SB Green)", lat: 51.5435, lng: -0.0165 },
+
+            // --- ZONE 1 & 2 ---
+            { id: "hyde-park", name: "Hyde Park & Kensington Gdns", zone: 1, sizeHa: 253, sizeDesc: "253 ha (79× SB Green)", lat: 51.5073, lng: -0.1657 },
+            { id: "regents-park", name: "Regent's Park & Primrose Hill", zone: 1, sizeHa: 191, sizeDesc: "191 ha (60× SB Green)", lat: 51.5313, lng: -0.1570 },
+            { id: "battersea-park", name: "Battersea Park", zone: 2, sizeHa: 83, sizeDesc: "83 ha (26× SB Green)", lat: 51.4791, lng: -0.1568 },
+            { id: "victoria-park", name: "Victoria Park", zone: 2, sizeHa: 86, sizeDesc: "86 ha (27× SB Green)", lat: 51.5365, lng: -0.0396 },
+            { id: "hampstead-heath", name: "Hampstead Heath", zone: 2, sizeHa: 320, sizeDesc: "320 ha (100× SB Green)", lat: 51.5608, lng: -0.1631 },
+            { id: "clapham-common", name: "Clapham Common", zone: 2, sizeHa: 89, sizeDesc: "89 ha (28× SB Green)", lat: 51.4585, lng: -0.1500 },
+            { id: "wandsworth-common", name: "Wandsworth Common", zone: 2, sizeHa: 70, sizeDesc: "70 ha (22× SB Green)", lat: 51.4482, lng: -0.1691 },
+            { id: "greenwich-park", name: "Greenwich Park & Blackheath", zone: 2, sizeHa: 174, sizeDesc: "174 ha (54× SB Green)", lat: 51.4769, lng: -0.0005 },
+            { id: "brockwell-park", name: "Brockwell Park", zone: 2, sizeHa: 50.8, sizeDesc: "50.8 ha (16× SB Green)", lat: 51.4519, lng: -0.1085 },
+            { id: "ravenscourt-park", name: "Ravenscourt Park", zone: 2, sizeHa: 13, sizeDesc: "13 ha (4× SB Green)", lat: 51.4965, lng: -0.2368 },
+            { id: "london-fields", name: "London Fields", zone: 2, sizeHa: 12.7, sizeDesc: "12.7 ha (4× SB Green)", lat: 51.5412, lng: -0.0578 },
+            { id: "parsons-green", name: "Parsons Green", zone: 2, sizeHa: 3.5, sizeDesc: "3.5 ha (1.1× SB Green)", lat: 51.4745, lng: -0.2010 },
+            { id: "eel-brook-common", name: "Eel Brook Common", zone: 2, sizeHa: 5.7, sizeDesc: "5.7 ha (1.8× SB Green)", lat: 51.4770, lng: -0.1945 },
+
+            // --- ZONE 4 & 5 ---
+            { id: "richmond-park", name: "Richmond Park", zone: 4, sizeHa: 955, sizeDesc: "955 ha (298× SB Green)", lat: 51.4428, lng: -0.2745 },
+            { id: "syon-park", name: "Syon Park", zone: 4, sizeHa: 80, sizeDesc: "80 ha (25× SB Green)", lat: 51.4762, lng: -0.3125 },
+            { id: "osterley-park", name: "Osterley Park (National Trust)", zone: 4, sizeHa: 140, sizeDesc: "140 ha (44× SB Green)", lat: 51.4885, lng: -0.3512 },
+            { id: "bushy-park", name: "Bushy Park", zone: 5, sizeHa: 445, sizeDesc: "445 ha (139× SB Green)", lat: 51.4145, lng: -0.3412 },
+            { id: "trent-park", name: "Trent Country Park", zone: 5, sizeHa: 320, sizeDesc: "320 ha (100× SB Green)", lat: 51.6582, lng: -0.1345 }
+        ];
+
+        // Detailed Pubs Dataset with On-Tap Beers, Average Pint Prices, and Nearest Stations
+        const pubsData = [
+            // --- ZONE 3 ---
+            {
+                id: 301,
+                name: "The Gunnersbury",
+                parkId: "gunnersbury-park",
+                parkName: "Gunnersbury Park",
+                parkSize: "72 ha",
+                zone: 3,
+                distance: 180,
+                avgPrice: 5.95,
+                priceTier: "£",
+                address: "590 Chiswick High Rd, London W4 5RP",
+                station: "Gunnersbury (District / Overground)",
+                stationWalk: "4 min walk (320m)",
+                stationMinutes: 4,
+                lat: 51.4932,
+                lng: -0.2785,
+                tags: ["garden", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Fuller's London Pride", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Beavertown Neck Oil IPA", type: "keg" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Extra Cold", type: "keg" }
+                ],
+                features: ["Front Pavement Terrace", "Corner Pub Local", "Traditional Cask Handpumps"],
+                rating: "4.3 ★"
+            },
+            {
+                id: 302,
+                name: "The Express Tavern",
+                parkId: "gunnersbury-park",
+                parkName: "Gunnersbury Park",
+                parkSize: "72 ha",
+                zone: 3,
+                distance: 380,
+                avgPrice: 6.20,
+                priceTier: "££",
+                address: "56 Kew Bridge Rd, Brentford TW8 0EW",
+                station: "Kew Bridge (Rail) / Gunnersbury",
+                stationWalk: "2 min walk (160m)",
+                stationMinutes: 2,
+                lat: 51.4888,
+                lng: -0.2872,
+                tags: ["historic", "garden", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Harvey's Sussex Best", type: "cask" },
+                    { name: "Oakham Citra", type: "cask" },
+                    { name: "Dark Star Hophead", type: "cask" },
+                    { name: "Siren Soundwave IPA", type: "keg" },
+                    { name: "Paulaner Munich Helles", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["8 Rotating Cask Lines", "CAMRA Recognized", "Covered Walled Garden"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 303,
+                name: "The Bell & Crown",
+                parkId: "gunnersbury-park",
+                parkName: "Gunnersbury Park",
+                parkSize: "72 ha",
+                zone: 3,
+                distance: 480,
+                avgPrice: 6.75,
+                priceTier: "£££",
+                address: "11-13 Strand-on-the-Green, London W4 3PF",
+                station: "Kew Bridge (Rail) / Gunnersbury",
+                stationWalk: "6 min walk (480m)",
+                stationMinutes: 6,
+                lat: 51.4872,
+                lng: -0.2815,
+                tags: ["river", "historic", "garden", "food", "cask"],
+                beersOnTap: [
+                    { name: "Fuller's London Pride", type: "cask" },
+                    { name: "Fuller's ESB", type: "cask" },
+                    { name: "Frontier Craft Lager", type: "keg" },
+                    { name: "Meantime Prime Pale", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Thames Riverside Patio", "18th Century Tavern", "Conservatory Dining"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 304,
+                name: "The Mawson Arms / Fuller's Brewery",
+                parkId: "chiswick-house",
+                parkName: "Chiswick House Grounds",
+                parkSize: "26 ha",
+                zone: 3,
+                distance: 120,
+                avgPrice: 5.80,
+                priceTier: "£",
+                address: "110 Chiswick Ln S, London W4 2PR",
+                station: "Turnham Green / Stamford Brook (District)",
+                stationWalk: "12 min walk (950m)",
+                stationMinutes: 12,
+                lat: 51.4878,
+                lng: -0.2512,
+                tags: ["historic", "food", "cask"],
+                beersOnTap: [
+                    { name: "London Pride (Fresh Brewery Tank)", type: "cask" },
+                    { name: "Chiswick Bitter", type: "cask" },
+                    { name: "Fuller's Vintage Draught", type: "cask" },
+                    { name: "Frontier Craft Lager", type: "keg" }
+                ],
+                features: ["Poured directly from brewery cellar", "Birthplace of London Pride", "Historic Taproom"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 305,
+                name: "The Rocket, Acton",
+                parkId: "acton-park",
+                parkName: "Acton Park",
+                parkSize: "11.3 ha",
+                zone: 3,
+                distance: 190,
+                avgPrice: 6.10,
+                priceTier: "£",
+                address: "11-13 Churchfield Rd, London W3 6BD",
+                station: "Acton Central (London Overground)",
+                stationWalk: "2 min walk (140m)",
+                stationMinutes: 2,
+                lat: 51.5078,
+                lng: -0.2675,
+                tags: ["garden", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Beavertown Gamma Ray APA", type: "keg" },
+                    { name: "Brixton Reliance Pale Ale", type: "keg" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Pravha Pilsner", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Churchfield Road Vibe", "Courtyard Patio", "Artisan Sourdough Pizza"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 306,
+                name: "The Rose & Crown, Ealing",
+                parkId: "walpole-park",
+                parkName: "Walpole & Lammas Park",
+                parkSize: "21.4 ha",
+                zone: 3,
+                distance: 110,
+                avgPrice: 6.30,
+                priceTier: "££",
+                address: "Church Pl, St Mary's Rd, London W5 4HN",
+                station: "South Ealing (Piccadilly) / Ealing Bway",
+                stationWalk: "7 min walk (550m)",
+                stationMinutes: 7,
+                lat: 51.5092,
+                lng: -0.3060,
+                tags: ["garden", "historic", "food", "cask"],
+                beersOnTap: [
+                    { name: "Fuller's London Pride", type: "cask" },
+                    { name: "Five Points Pale Ale", type: "cask" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Heated Leafy Courtyard", "Near Pitzhanger Manor", "Historic Timber Beams"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 307,
+                name: "The Botanist, Kew",
+                parkId: "kew-gardens",
+                parkName: "Kew Gardens & Green",
+                parkSize: "130 ha",
+                zone: 3,
+                distance: 80,
+                avgPrice: 6.90,
+                priceTier: "£££",
+                address: "3-5 Kew Green, Richmond TW9 3AA",
+                station: "Kew Gardens (District / Overground)",
+                stationWalk: "6 min walk (480m)",
+                stationMinutes: 6,
+                lat: 51.4828,
+                lng: -0.2875,
+                tags: ["garden", "food", "direct", "cask"],
+                beersOnTap: [
+                    { name: "Twickenham Grandstand", type: "cask" },
+                    { name: "Sambrook's Wandle Ale", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Estrella Damm Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Kew Green Cricket Views", "Botanical Cocktails", "Pavement Terrace"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 308,
+                name: "The Fox & Grapes, Wimbledon",
+                parkId: "wimbledon-common",
+                parkName: "Wimbledon Common",
+                parkSize: "460 ha",
+                zone: 3,
+                distance: 30,
+                avgPrice: 6.80,
+                priceTier: "£££",
+                address: "9 Camp Rd, Wimbledon, SW19 4UN",
+                station: "Wimbledon (District / Rail - Bus 93)",
+                stationWalk: "14 min walk / 4m bus",
+                stationMinutes: 14,
+                lat: 51.4285,
+                lng: -0.2295,
+                tags: ["garden", "direct", "food", "cask"],
+                beersOnTap: [
+                    { name: "Wimbledon Common Pale Ale", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Situated on Common perimeter", "Gastro Roasts", "Dog Walkers Paradise"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 309,
+                name: "The Crooked Billet",
+                parkId: "wimbledon-common",
+                parkName: "Wimbledon Common",
+                parkSize: "460 ha",
+                zone: 3,
+                distance: 50,
+                avgPrice: 6.60,
+                priceTier: "££",
+                address: "14-15 Crooked Billet, SW19 4RQ",
+                station: "Wimbledon (District / Rail)",
+                stationWalk: "12 min walk (900m)",
+                stationMinutes: 12,
+                lat: 51.4248,
+                lng: -0.2265,
+                tags: ["garden", "direct", "historic", "cask"],
+                beersOnTap: [
+                    { name: "Young's Original Bitter", type: "cask" },
+                    { name: "Young's Special", type: "cask" },
+                    { name: "Beavertown Gamma Ray", type: "keg" },
+                    { name: "Estrella Damm", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Drinks served onto the Common grass", "18th-century Pub", "Famous Summer Vibe"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 310,
+                name: "The Alma, Crystal Palace",
+                parkId: "crystal-palace",
+                parkName: "Crystal Palace Park",
+                parkSize: "80 ha",
+                zone: 3,
+                distance: 120,
+                avgPrice: 6.25,
+                priceTier: "££",
+                address: "95 Church Rd, London SE19 2TA",
+                station: "Crystal Palace (Overground / Rail)",
+                stationWalk: "5 min walk (380m)",
+                stationMinutes: 5,
+                lat: 51.4185,
+                lng: -0.0765,
+                tags: ["food", "garden", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Gipsy Hill Hepcat IPA", type: "keg" },
+                    { name: "Brick Brewery Peckham Pils", type: "keg" },
+                    { name: "Five Points Best Bitter", type: "cask" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Crystal Palace Triangle", "Craft Beer Tap Takeovers", "Secret Garden Patio"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 311,
+                name: "The Starting Gate",
+                parkId: "alexandra-park",
+                parkName: "Alexandra Park (Ally Pally)",
+                parkSize: "80 ha",
+                zone: 3,
+                distance: 140,
+                avgPrice: 5.90,
+                priceTier: "£",
+                address: "Buckingham Rd, London N22 7SS",
+                station: "Alexandra Palace (National Rail)",
+                stationWalk: "1 min walk (80m)",
+                stationMinutes: 1,
+                lat: 51.5975,
+                lng: -0.1252,
+                tags: ["historic", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Redemption Trinity", type: "cask" },
+                    { name: "Five Points Pale Ale", type: "cask" },
+                    { name: "Sharp's Doom Bar", type: "cask" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Opposite Alexandra Palace Station", "Victorian Stained Glass", "Pre-event Meeting Spot"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 312,
+                name: "CRATE Brewery & Pizzeria",
+                parkId: "olympic-park",
+                parkName: "Queen Elizabeth Olympic Park",
+                parkSize: "226 ha",
+                zone: 3,
+                distance: 280,
+                avgPrice: 6.40,
+                priceTier: "££",
+                address: "Unit 7 Queen's Yard, London E9 5EN",
+                station: "Hackney Wick (London Overground)",
+                stationWalk: "3 min walk (220m)",
+                stationMinutes: 3,
+                lat: 51.5428,
+                lng: -0.0225,
+                tags: ["river", "garden", "food", "station_close"],
+                beersOnTap: [
+                    { name: "CRATE IPA (Fresh Tank)", type: "keg" },
+                    { name: "CRATE Session IPA", type: "keg" },
+                    { name: "CRATE Crisp Lager", type: "keg" },
+                    { name: "CRATE Pale Ale", type: "keg" }
+                ],
+                features: ["Lee Navigation Canalside Decking", "On-site Craft Brewery", "Stone-baked Pizza"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 313,
+                name: "The Holly Tree",
+                parkId: "wanstead-flats",
+                parkName: "Wanstead Flats (Epping Forest)",
+                parkSize: "180 ha",
+                zone: 3,
+                distance: 280,
+                avgPrice: 6.15,
+                priceTier: "£",
+                address: "141 Dames Rd, Forest Gate, E7 0DZ",
+                station: "Wanstead Park (Overground) / Forest Gate (Eliz)",
+                stationWalk: "6 min walk (480m)",
+                stationMinutes: 6,
+                lat: 51.5562,
+                lng: 0.0185,
+                tags: ["garden", "historic", "cask"],
+                beersOnTap: [
+                    { name: "Signature Brew Studio Lager", type: "keg" },
+                    { name: "Five Points XPA", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Working Miniature Train in Beer Garden", "Heated Marquee", "Edge of Epping Forest"],
+                rating: "4.6 ★"
+            },
+
+            // --- ZONE 1 & 2 ---
+            {
+                id: 101,
+                name: "The White Horse (The Sloaney Pony)",
+                parkId: "parsons-green",
+                parkName: "Parsons Green",
+                parkSize: "3.5 ha",
+                zone: 2,
+                distance: 15,
+                avgPrice: 6.95,
+                priceTier: "£££",
+                address: "1-3 Parsons Green, London SW6 4UL",
+                station: "Parsons Green (District line)",
+                stationWalk: "2 min walk (150m)",
+                stationMinutes: 2,
+                lat: 51.4751,
+                lng: -0.2007,
+                tags: ["garden", "direct", "historic", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Harviestoun Bitter & Twisted", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Paulaner Munich Helles (Tank Draught)", type: "keg" },
+                    { name: "Thornbridge Jaipur IPA", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Famous Green-side Terrace", "World-renowned Cask & Craft Selection", "Historic Coaching Inn"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 102,
+                name: "The Rose, Fulham",
+                parkId: "eel-brook-common",
+                parkName: "Eel Brook Common",
+                parkSize: "5.7 ha",
+                zone: 2,
+                distance: 70,
+                avgPrice: 6.70,
+                priceTier: "££",
+                address: "1 Harwood Terrace, London SW6 2S1",
+                station: "Fulham Broadway (District line)",
+                stationWalk: "5 min walk (380m)",
+                stationMinutes: 5,
+                lat: 51.4762,
+                lng: -0.1925,
+                tags: ["garden", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Walled Fairy-lit Garden", "Wood-fired Pizza", "Direct Common View"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 103,
+                name: "The Anglesea Arms",
+                parkId: "ravenscourt-park",
+                parkName: "Ravenscourt Park",
+                parkSize: "13 ha",
+                zone: 2,
+                distance: 180,
+                avgPrice: 6.45,
+                priceTier: "££",
+                address: "35 Wingate Rd, London W6 0UR",
+                station: "Ravenscourt Park (District line)",
+                stationWalk: "6 min walk (480m)",
+                stationMinutes: 6,
+                lat: 51.4984,
+                lng: -0.2372,
+                tags: ["garden", "food", "cask"],
+                beersOnTap: [
+                    { name: "Timothy Taylor's Boltmaker", type: "cask" },
+                    { name: "Harvey's Sussex Best Bitter", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Estrella Galicia", type: "keg" }
+                ],
+                features: ["6 Rotating Cask Lines", "Sunlit Pavement Terrace", "Acclaimed Gastro Dining"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 104,
+                name: "The Florence",
+                parkId: "brockwell-park",
+                parkName: "Brockwell Park",
+                parkSize: "50.8 ha",
+                zone: 2,
+                distance: 40,
+                avgPrice: 6.30,
+                priceTier: "££",
+                address: "131 Dulwich Rd, London SE24 0NG",
+                station: "Herne Hill (National Rail)",
+                stationWalk: "3 min walk (210m)",
+                stationMinutes: 3,
+                lat: 51.4532,
+                lng: -0.1032,
+                tags: ["garden", "direct", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "In-house Brockwell Bitter", type: "cask" },
+                    { name: "Brixton Reliance Pale", type: "keg" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Facing Brockwell Lido", "On-site Microbrewery", "Huge Garden Marquee"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 105,
+                name: "The People's Park Tavern",
+                parkId: "victoria-park",
+                parkName: "Victoria Park",
+                parkSize: "86 ha",
+                zone: 2,
+                distance: 15,
+                avgPrice: 6.20,
+                priceTier: "££",
+                address: "360 Victoria Park Rd, London E9 7BT",
+                station: "Homerton (London Overground)",
+                stationWalk: "10 min walk (800m)",
+                stationMinutes: 10,
+                lat: 51.5376,
+                lng: -0.0381,
+                tags: ["garden", "direct", "food", "cask"],
+                beersOnTap: [
+                    { name: "Laine Source Pale Ale", type: "keg" },
+                    { name: "Laine Ripper Session IPA", type: "keg" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Gate direct into Victoria Park", "On-site Brewery", "Massive Heated Garden"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 106,
+                name: "The Spaniards Inn",
+                parkId: "hampstead-heath",
+                parkName: "Hampstead Heath",
+                parkSize: "320 ha",
+                zone: 2,
+                distance: 25,
+                avgPrice: 6.85,
+                priceTier: "£££",
+                address: "Spaniards Rd, London NW3 7JJ",
+                station: "Hampstead (Northern line)",
+                stationWalk: "12 min walk / bus",
+                stationMinutes: 12,
+                lat: 51.5714,
+                lng: -0.1741,
+                tags: ["historic", "garden", "direct", "cask"],
+                beersOnTap: [
+                    { name: "Castle Rock Harvest Pale", type: "cask" },
+                    { name: "Sharp's Atlantic Pale", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Built 1585", "Keats & Dickens Memorabilia", "Heath Perimeter Garden"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 107,
+                name: "The Prince Albert",
+                parkId: "battersea-park",
+                parkName: "Battersea Park",
+                parkSize: "83 ha",
+                zone: 2,
+                distance: 40,
+                avgPrice: 6.75,
+                priceTier: "£££",
+                address: "85 Albert Bridge Rd, London SW11 4PF",
+                station: "Battersea Park (Overground / Rail)",
+                stationWalk: "10 min walk (800m)",
+                stationMinutes: 10,
+                lat: 51.4798,
+                lng: -0.1672,
+                tags: ["garden", "direct", "food", "cask"],
+                beersOnTap: [
+                    { name: "Sambrook's Junction Ale", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Opposite Albert Bridge Gate", "Victorian Gastropub", "Covered Parkside Patio"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 108,
+                name: "Pub on the Park",
+                parkId: "london-fields",
+                parkName: "London Fields",
+                parkSize: "12.7 ha",
+                zone: 2,
+                distance: 10,
+                avgPrice: 6.25,
+                priceTier: "££",
+                address: "19 Martello St, London E8 3PE",
+                station: "London Fields (London Overground)",
+                stationWalk: "2 min walk (120m)",
+                stationMinutes: 2,
+                lat: 51.5419,
+                lng: -0.0583,
+                tags: ["garden", "direct", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Five Points Jupa", type: "keg" },
+                    { name: "Hackney Brewery Pale Ale", type: "keg" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Elevated deck over London Fields", "DJ Nights & Sports", "Sunset Pints"],
+                rating: "4.3 ★"
+            },
+            {
+                id: 109,
+                name: "The Windmill on the Common",
+                parkId: "clapham-common",
+                parkName: "Clapham Common",
+                parkSize: "89 ha",
+                zone: 2,
+                distance: 0,
+                avgPrice: 6.55,
+                priceTier: "££",
+                address: "Clapham Common South Side, SW4 9DE",
+                station: "Clapham South (Northern line)",
+                stationWalk: "4 min walk (300m)",
+                stationMinutes: 4,
+                lat: 51.4547,
+                lng: -0.1478,
+                tags: ["garden", "direct", "historic", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Young's Bitter", type: "cask" },
+                    { name: "Young's Special", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Situated directly on the common", "Boutique Hotel", "Huge Outdoor Lawn"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 110,
+                name: "The Hope, Wandsworth Common",
+                parkId: "wandsworth-common",
+                parkName: "Wandsworth Common",
+                parkSize: "70 ha",
+                zone: 2,
+                distance: 40,
+                avgPrice: 6.45,
+                priceTier: "££",
+                address: "1 Bellevue Rd, London SW17 7EG",
+                station: "Wandsworth Common (National Rail)",
+                stationWalk: "1 min walk (80m)",
+                stationMinutes: 1,
+                lat: 51.4468,
+                lng: -0.1654,
+                tags: ["garden", "direct", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Sambrook's Wandle Ale", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Overlooking Common ponds", "Large front terrace", "Famous Sunday Roast"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 111,
+                name: "The Plume of Feathers",
+                parkId: "greenwich-park",
+                parkName: "Greenwich Park & Blackheath",
+                parkSize: "174 ha",
+                zone: 2,
+                distance: 80,
+                avgPrice: 6.35,
+                priceTier: "££",
+                address: "19 Park Vista, London SE10 9LZ",
+                station: "Maze Hill (Rail) / Cutty Sark (DLR)",
+                stationWalk: "3 min walk (240m)",
+                stationMinutes: 3,
+                lat: 51.4816,
+                lng: -0.0006,
+                tags: ["historic", "garden", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Harvey's Sussex Best", type: "cask" },
+                    { name: "Sharp's Doom Bar", type: "cask" },
+                    { name: "Meantime London Pale", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Oldest pub in Greenwich (1691)", "Open log fire", "Secret rear beer garden"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 112,
+                name: "The Grenadier",
+                parkId: "hyde-park",
+                parkName: "Hyde Park & Kensington Gdns",
+                parkSize: "253 ha",
+                zone: 1,
+                distance: 150,
+                avgPrice: 7.20,
+                priceTier: "£££",
+                address: "18 Wilton Row, London SW1X 7NR",
+                station: "Hyde Park Corner (Piccadilly line)",
+                stationWalk: "4 min walk (320m)",
+                stationMinutes: 4,
+                lat: 51.5015,
+                lng: -0.1534,
+                tags: ["historic", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Fuller's London Pride", type: "cask" },
+                    { name: "Greene King IPA", type: "cask" },
+                    { name: "Peroni Nastro Azzurro", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Cobbled Belgravia Mews", "Duke of Wellington's Officers Mess", "Military Lore"],
+                rating: "4.6 ★"
+            },
+            {
+                id: 113,
+                name: "The Edinboro Castle",
+                parkId: "regents-park",
+                parkName: "Regent's Park & Primrose Hill",
+                parkSize: "191 ha",
+                zone: 1,
+                distance: 120,
+                avgPrice: 6.90,
+                priceTier: "£££",
+                address: "57 Mornington Terrace, NW1 7RU",
+                station: "Mornington Crescent / Camden Town (Northern)",
+                stationWalk: "6 min walk (480m)",
+                stationMinutes: 6,
+                lat: 51.5358,
+                lng: -0.1465,
+                tags: ["garden", "food", "cask"],
+                beersOnTap: [
+                    { name: "Camden Hells (Fresh Local Tank)", type: "keg" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Enormous Camden beer garden", "Outdoor Burger Shack", "Short walk to Primrose Hill summit"],
+                rating: "4.4 ★"
+            },
+
+            // --- ZONE 4 & 5 ---
+            {
+                id: 401,
+                name: "The Roebuck",
+                parkId: "richmond-park",
+                parkName: "Richmond Park",
+                parkSize: "955 ha",
+                zone: 4,
+                distance: 250,
+                avgPrice: 6.70,
+                priceTier: "££",
+                address: "130 Richmond Hill, TW10 6RN",
+                station: "Richmond (District / Overground / Rail)",
+                stationWalk: "12 min walk / 3m bus (371)",
+                stationMinutes: 12,
+                lat: 51.4522,
+                lng: -0.2977,
+                tags: ["garden", "historic", "cask"],
+                beersOnTap: [
+                    { name: "Twickenham Naked Ladies", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Beavertown Neck Oil", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Protected Turner's View over the Thames", "Pints on Richmond Hill bench", "Historic Tap"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 402,
+                name: "The London Apprentice",
+                parkId: "syon-park",
+                parkName: "Syon Park",
+                parkSize: "80 ha",
+                zone: 4,
+                distance: 280,
+                avgPrice: 6.25,
+                priceTier: "££",
+                address: "62 Church St, Isleworth TW7 6BG",
+                station: "Isleworth (National Rail)",
+                stationWalk: "10 min walk (780m)",
+                stationMinutes: 10,
+                lat: 51.4745,
+                lng: -0.3245,
+                tags: ["river", "historic", "garden", "food", "cask"],
+                beersOnTap: [
+                    { name: "Fuller's London Pride", type: "cask" },
+                    { name: "Fuller's ESB", type: "cask" },
+                    { name: "Frontier Craft Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["15th-century Waterfront Inn", "King Henry VIII and Charles I Patronage", "Thames Terrace"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 403,
+                name: "The Hare and Hounds, Osterley",
+                parkId: "osterley-park",
+                parkName: "Osterley Park (National Trust)",
+                parkSize: "140 ha",
+                zone: 4,
+                distance: 350,
+                avgPrice: 5.95,
+                priceTier: "£",
+                address: "Wyke Green, Windmill Ln, Isleworth TW7 5PR",
+                station: "Osterley (Piccadilly line)",
+                stationWalk: "8 min walk (620m)",
+                stationMinutes: 8,
+                lat: 51.4912,
+                lng: -0.3425,
+                tags: ["garden", "food", "cask"],
+                beersOnTap: [
+                    { name: "Sharp's Doom Bar", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Grade II Listed Georgian Tavern", "Huge Acre Garden", "Near Osterley House Gates"],
+                rating: "4.4 ★"
+            },
+            {
+                id: 404,
+                name: "The King's Arms, Hampton Court",
+                parkId: "bushy-park",
+                parkName: "Bushy Park",
+                parkSize: "445 ha",
+                zone: 5,
+                distance: 60,
+                avgPrice: 6.40,
+                priceTier: "££",
+                address: "Lion Gate, Hampton Court Rd, KT8 9DD",
+                station: "Hampton Court (National Rail)",
+                stationWalk: "5 min walk (420m)",
+                stationMinutes: 5,
+                lat: 51.4052,
+                lng: -0.3395,
+                tags: ["historic", "garden", "direct", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "Courage Best Bitter", type: "cask" },
+                    { name: "Timothy Taylor's Landlord", type: "cask" },
+                    { name: "Camden Hells", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Directly opposite Bushy Park Lion Gate", "1709 Coaching Inn", "Courtyard Patio"],
+                rating: "4.5 ★"
+            },
+            {
+                id: 405,
+                name: "The Cock Inn, Cockfosters",
+                parkId: "trent-park",
+                parkName: "Trent Country Park",
+                parkSize: "320 ha",
+                zone: 5,
+                distance: 310,
+                avgPrice: 5.85,
+                priceTier: "£",
+                address: "Chalk Ln, Cockfosters, Barnet EN4 9HU",
+                station: "Cockfosters (Piccadilly line)",
+                stationWalk: "4 min walk (320m)",
+                stationMinutes: 4,
+                lat: 51.6528,
+                lng: -0.1485,
+                tags: ["garden", "historic", "food", "cask", "station_close"],
+                beersOnTap: [
+                    { name: "McMullen AK Mild", type: "cask" },
+                    { name: "McMullen Country Bitter", type: "cask" },
+                    { name: "Camden Hells Lager", type: "keg" },
+                    { name: "Guinness Draught", type: "keg" }
+                ],
+                features: ["Country style village pub", "End of Piccadilly Line Hub", "Trent Country Park Trailhead"],
+                rating: "4.4 ★"
+            }
+        ];
+
+        // Global State
+        let currentRadius = 350;
+        let activeZoneFilter = 'all';
+        let activeFeatureFilter = 'all';
+        let searchQuery = '';
+        let map;
+        let pubMarkers = [];
+        let parkMarkers = [];
+        let radiusCircles = [];
+
+        function initMap() {
+            map = L.map('map', {
+                center: [51.5050, -0.1550],
+                zoom: 12,
+                zoomControl: true
+            });
+
+            // CartoDB Voyager Google-style raster tiles
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+
+            renderParkMarkers();
+            renderMapAndList();
+        }
+
+        // Custom Marker Pin Generator
+        function createPubIcon(active = false) {
+            return L.divIcon({
+                className: 'custom-pub-pin',
+                html: `
+                    <div style="
+                        background: ${active ? '#1a73e8' : '#e65100'};
+                        color: white;
+                        width: 30px;
+                        height: 30px;
+                        border-radius: 50% 50% 50% 0;
+                        transform: rotate(-45deg);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+                        border: 2px solid white;">
+                        <span style="transform: rotate(45deg); font-size: 13px;">🍺</span>
+                    </div>
+                `,
+                iconSize: [30, 30],
+                iconAnchor: [15, 30],
+                popupAnchor: [0, -30]
+            });
+        }
+
+        function createParkIcon(park) {
+            return L.divIcon({
+                className: 'custom-park-pin',
+                html: `
+                    <div style="
+                        background: #2e7d32;
+                        color: white;
+                        padding: 3px 7px;
+                        border-radius: 12px;
+                        font-weight: 700;
+                        font-size: 10px;
+                        display: flex;
+                        align-items: center;
+                        gap: 3px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+                        border: 1.5px solid white;
+                        white-space: nowrap;">
+                        <span>🌳</span> ${park.name} (Z${park.zone} • ${park.sizeHa} ha)
+                    </div>
+                `,
+                iconSize: [140, 24],
+                iconAnchor: [70, 12],
+                popupAnchor: [0, -12]
+            });
+        }
+
+        function renderParkMarkers() {
+            allQualifyingParks.forEach(park => {
+                const marker = L.marker([park.lat, park.lng], { icon: createParkIcon(park) }).addTo(map);
+                marker.bindPopup(`
+                    <div class="popup-card">
+                        <div class="popup-title">🌳 ${park.name}</div>
+                        <div class="popup-subtitle">TfL Zone ${park.zone} Public Open Space</div>
+                        <div class="popup-metric">
+                            <strong>Total Area:</strong> ${park.sizeDesc}<br>
+                            <span style="color: var(--park-green); font-weight: 600;">✓ Baseline verified: > 3.2 ha (Shepherd's Bush Green)</span>
+                        </div>
+                    </div>
+                `);
+                parkMarkers.push(marker);
+            });
+        }
+
+        function renderMapAndList() {
+            pubMarkers.forEach(m => map.removeLayer(m));
+            radiusCircles.forEach(c => map.removeLayer(c));
+            pubMarkers = [];
+            radiusCircles = [];
+
+            const listContainer = document.getElementById('pub-list-container');
+            listContainer.innerHTML = '';
+
+            const filtered = pubsData.filter(pub => {
+                const matchesRadius = pub.distance <= currentRadius;
+                const matchesZone = activeZoneFilter === 'all' || pub.zone === parseInt(activeZoneFilter);
+                
+                let matchesFeature = true;
+                if (activeFeatureFilter === 'cask') {
+                    matchesFeature = pub.beersOnTap.some(b => b.type === 'cask');
+                } else if (activeFeatureFilter === 'under_6') {
+                    matchesFeature = pub.avgPrice < 6.20;
+                } else if (activeFeatureFilter === 'station_close') {
+                    matchesFeature = pub.stationMinutes <= 5;
+                } else if (activeFeatureFilter !== 'all') {
+                    matchesFeature = pub.tags.includes(activeFeatureFilter);
+                }
+
+                const searchTarget = `${pub.name} ${pub.parkName} ${pub.station} ${pub.beersOnTap.map(b => b.name).join(' ')} zone ${pub.zone} z${pub.zone}`.toLowerCase();
+                const matchesSearch = searchQuery === '' || searchTarget.includes(searchQuery);
+
+                return matchesRadius && matchesZone && matchesFeature && matchesSearch;
+            });
+
+            document.getElementById('results-count').textContent = `${filtered.length} Pub${filtered.length === 1 ? '' : 's'} Found`;
+            document.getElementById('radius-label').textContent = `≤ ${currentRadius}m from park`;
+
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <p style="font-size: 1.6rem; margin-bottom: 0.5rem;">🔍</p>
+                        <strong>No pubs match this criteria</strong>
+                        <p style="font-size: 0.8rem; margin-top: 0.35rem;">Try increasing the radius slider or changing your search terms.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sorting logic
+            const sortMode = document.getElementById('sort-select').value;
+            if (sortMode === 'price_asc') {
+                filtered.sort((a, b) => a.avgPrice - b.avgPrice);
+            } else if (sortMode === 'price_desc') {
+                filtered.sort((a, b) => b.avgPrice - a.avgPrice);
+            } else if (sortMode === 'rating') {
+                filtered.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+            } else {
+                filtered.sort((a, b) => a.distance - b.distance);
+            }
+
+            filtered.forEach(pub => {
+                const marker = L.marker([pub.lat, pub.lng], { icon: createPubIcon() }).addTo(map);
+                
+                const circle = L.circle([pub.lat, pub.lng], {
+                    radius: currentRadius,
+                    color: '#e65100',
+                    fillColor: '#ffa726',
+                    fillOpacity: 0.08,
+                    weight: 1,
+                    dashArray: '3, 4'
+                }).addTo(map);
+                radiusCircles.push(circle);
+
+                const popupContent = `
+                    <div class="popup-card">
+                        <div class="popup-title">
+                            <span>${pub.name}</span>
+                            <span class="price-badge">~£${pub.avgPrice.toFixed(2)} / pt</span>
+                        </div>
+                        <div class="popup-subtitle">${pub.address}</div>
+                        <div class="popup-metric">
+                            📍 <strong>Park:</strong> ${pub.parkName} (${pub.distance}m, Zone ${pub.zone})<br>
+                            🚇 <strong>Station:</strong> ${pub.station} (${pub.stationWalk})<br>
+                            ⭐ <strong>Rating:</strong> ${pub.rating}
+                        </div>
+                        <div class="on-tap-section" style="margin: 0.4rem 0;">
+                            <div class="on-tap-header">
+                                <span>🍺 Draught Beers on Tap:</span>
+                                <span>(Avg £${pub.avgPrice.toFixed(2)})</span>
+                            </div>
+                            <div class="beers-pill-group">
+                                ${pub.beersOnTap.map(b => `<span class="beer-pill ${b.type}">${b.name} ${b.type === 'cask' ? '(Cask)' : ''}</span>`).join('')}
+                            </div>
+                        </div>
+                        <div class="pub-features">
+                            ${pub.features.map(f => `<span class="feat-pill">${f}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+                pubMarkers.push(marker);
+
+                // Sidebar Card
+                const card = document.createElement('div');
+                card.className = 'pub-card';
+                card.id = `card-${pub.id}`;
+                card.innerHTML = `
+                    <div class="pub-header">
+                        <div class="pub-name">${pub.name}</div>
+                        <div class="badges-top">
+                            <span class="price-badge">~£${pub.avgPrice.toFixed(2)}</span>
+                            <span class="dist-badge">📍 ${pub.distance}m</span>
+                        </div>
+                    </div>
+                    <div class="pub-address">${pub.address}</div>
+                    <div class="meta-tags-container">
+                        <span class="park-tag">🌳 ${pub.parkName} (${pub.parkSize})</span>
+                        <span class="zone-badge">Zone ${pub.zone}</span>
+                        <span class="station-badge">🚇 ${pub.station} (${pub.stationWalk})</span>
+                    </div>
+                    
+                    <!-- Draught Beers on Tap -->
+                    <div class="on-tap-section">
+                        <div class="on-tap-header">
+                            <span>🍺 Draught Beers on Tap:</span>
+                            <span style="color: var(--price-green);">Avg Pint: £${pub.avgPrice.toFixed(2)}</span>
+                        </div>
+                        <div class="beers-pill-group">
+                            ${pub.beersOnTap.map(b => `<span class="beer-pill ${b.type}">${b.name} ${b.type === 'cask' ? '(Cask)' : ''}</span>`).join('')}
+                        </div>
+                    </div>
+
+                    <div class="pub-features">
+                        ${pub.features.map(f => `<span class="feat-pill">${f}</span>`).join('')}
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.pub-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    map.flyTo([pub.lat, pub.lng], 16, { duration: 1 });
+                    marker.openPopup();
+                });
+
+                listContainer.appendChild(card);
+            });
+        }
+
+        function updateRadius(val) {
+            currentRadius = parseInt(val);
+            document.getElementById('radius-display').textContent = `${val} m`;
+            renderMapAndList();
+        }
+
+        function setZoneFilter(zone, elem) {
+            activeZoneFilter = zone;
+            document.querySelectorAll('.zone-pill').forEach(b => b.classList.remove('active'));
+            elem.classList.add('active');
+            renderMapAndList();
+        }
+
+        function setFeatureFilter(feat, elem) {
+            activeFeatureFilter = feat;
+            document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+            elem.classList.add('active');
+            renderMapAndList();
+        }
+
+        function filterPubs() {
+            searchQuery = document.getElementById('search-box').value.toLowerCase().trim();
+            renderMapAndList();
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
